@@ -113,7 +113,7 @@ def get_datasets(tokenized, y, test_window_start):
 
     return train_dataset, val_dataset, y_val
 
-def train_model(train_dataset, val_dataset, path_model):
+def train_model(train_dataset, val_dataset, path_model, epochs):
     
     # Model
     model = GPT2LMHeadModel.from_pretrained('gpt2').to(DEVICE)
@@ -121,7 +121,7 @@ def train_model(train_dataset, val_dataset, path_model):
     # Training
     training_args = TrainingArguments(
         output_dir='./results',
-        num_train_epochs=1,
+        num_train_epochs=epochs,
         per_device_train_batch_size=2,
         per_device_eval_batch_size=2,
         learning_rate=2e-5,
