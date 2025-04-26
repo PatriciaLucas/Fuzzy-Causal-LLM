@@ -149,31 +149,24 @@ def train_model(train_dataset, val_dataset, path_model, epochs):
 
 def predict(model, tokenizer, sequences, partitioner):
     pred_length = 1
-
     input_seq = sequences[:sequences.index(']') + 1]
-        
-    inputs = tokenizer.encode(input_seq, return_tensors='pt').to(DEVICE)
 
+    inputs = tokenizer.encode(input_seq, return_tensors='pt').to(DEVICE)
+    
     outputs = model.generate(
         inputs,
         max_length = inputs.shape[1] + pred_length * 4,
-        temperature=0.8,
+        temperature=0.5,
         num_return_sequences=1,
         pad_token_id=tokenizer.eos_token_id
     )
 
     decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
     decoded_split = decoded.split(']')[-1].split()
-        
-    decoded_value = []
-    for i in tuple(decoded_split):
-        try:
-            var, fset = partitioner.get_fuzzy_set_by_name(i)
-            decoded_value.append(partitioner.centers[var][fset].item())
-        except:
-            print("Except")
-            decoded_value.append(0)
-            
-    pred_out = np.mean(decoded_value)
 
-    return pred_out
+    #print(f"Decoded: {decoded_split[0]}")
+
+    var, fset = partitioner.get_fuzzy_set_by_name(decoded_split[0])
+    decoded_value = partitioner.centers[var][fset].item()
+
+    return decoded_value
