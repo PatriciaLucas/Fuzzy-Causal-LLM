@@ -122,8 +122,8 @@ def train_model(train_dataset, val_dataset, path_model, epochs):
     training_args = TrainingArguments(
         output_dir='./results',
         num_train_epochs=epochs,
-        per_device_train_batch_size=2,
-        per_device_eval_batch_size=2,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=32,
         learning_rate=2e-5,
         warmup_steps=50,
         weight_decay=0.001,
