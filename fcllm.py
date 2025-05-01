@@ -1,26 +1,53 @@
-import pandas as pd
+import clshq_tk
+from AUTODCETS import util, feature_selection, datasets, save_database as sd
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
+from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import pipeline, set_seed
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, TrainingArguments, Trainer
+
+import torch
+from torch import nn, optim
+from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader
+from torchvision import transforms
+
 from clshq_tk.modules.fuzzy import GridPartitioner, trimf, gaussmf, training_loop
 from clshq_tk.data.regression import RegressionTS
 from clshq_tk.common import DEVICE, DEFAULT_PATH, resume, checkpoint, order_window
-from typing import List, Dict, Any
-from AUTODCETS import feature_selection, datasets, util
-import torch
-from torch.utils.data import Dataset
-import os
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def upload_dataset(name_dataset):
+  return pd.DataFrame(datasets.get_multivariate(name_dataset))
 
-# Dataset
-class TS_Dataset(Dataset):
+def upload_dataset(name_dataset):
+  return pd.DataFrame(datasets.get_multivariate(name_dataset))
+
+class train_Dataset(Dataset):
+    def __init__(self, input_ids, attention_mask):
+        self.input_ids = input_ids
+        self.attention_mask = attention_mask
+
+    def __getitem__(self, idx):
+        #torch.cat((self.input_ids[idx], self.labels[idx]),axis=0)
+        return {
+            'input_ids': self.input_ids[idx],
+            'attention_mask': self.attention_mask[idx],
+            'labels': self.input_ids[idx].clone()
+        }
+
+    def __len__(self):
+        return len(self.input_ids)
+
+class test_Dataset(Dataset):
     def __init__(self, input_ids, attention_mask, labels):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
         self.labels = labels
 
     def __getitem__(self, idx):
+        #torch.cat((self.input_ids[idx], self.labels[idx]),axis=0)
         return {
             'input_ids': self.input_ids[idx],
             'attention_mask': self.attention_mask[idx],
@@ -30,22 +57,11 @@ class TS_Dataset(Dataset):
     def __len__(self):
         return len(self.input_ids)
 
-
-def fuzzification(df, name_dataset, letter, partitioner = None):
-    '''
-        Fuzzification of the univariate times series.
-        param df: DataFrame with the time series data.
-        param name_dataset: Name of the dataset.
-        param letter: Name of the linguistic variable.
-        param partitioner: GridPartitioner object. If None, it will be created.
-        return: Fuzzified time series, original time series labels, partitioner object.
-    '''
+def fuzzification(df, name_dataset, letter, partitions, partitioner = None):
 
     if partitioner is None:
-        partitions = 25  # Number of fuzzy sets
-        order = 1
 
-        ts = RegressionTS(name_dataset, 100, df.values, order = order, step_ahead = 0, dtype=torch.float64)
+        ts = RegressionTS(name_dataset, 2000, df.values, order = 1, step_ahead = 0, dtype=torch.float64)
 
         partitioner = GridPartitioner(trimf, partitions, ts.num_attributes, device = DEVICE, dtype = ts.dtype,
                                     var_names = [letter])
@@ -62,61 +78,54 @@ def fuzzification(df, name_dataset, letter, partitioner = None):
     return pd.DataFrame(ts_fuzzy), ts.y, partitioner
 
 
-def create_sequences(X, y):
+def create_sequences(X, y, tokenizer):
   sequences = []
   for i in range(len(X)):
       seq_in = X.iloc[i].values
       seq_out = y.iloc[i]
       sequences.append((str(seq_in).replace("'", ""),str(seq_out)))
   
-  text_sequences = [f"{inp} {out}" for inp, out in sequences]
+  text_sequences = [f"{inp} {out}" + tokenizer.eos_token for inp, out in sequences]
 
   return text_sequences
 
 
-def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags):
+def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokenizer, partitions):
     variables = df.columns.tolist()
     dict_variables = dict.fromkeys(variables)
     
     # Fuzzification of time series
     data_fuzzy = pd.DataFrame(columns=variables)
     for v in variables:
-        dict_variables[v] = fuzzification(pd.DataFrame(df[v]), name_dataset, v, None)
+        dict_variables[v] = fuzzification(pd.DataFrame(df[v]), name_dataset, v, partitions, None)
         data_fuzzy[v] = dict_variables[v][0]
 
     # Causal graph generation
-    graph = feature_selection.causal_graph(df, target=target, max_lags=max_lags)[target]
+    graph = feature_selection.causal_graph(df.head(2000), target=target, max_lags=max_lags)[target]
     X, y_hat = util.organize_dataset(data_fuzzy, graph, max_lags, target)
     y = dict_variables[target][1].squeeze().tolist()[max_lags:]
+    y_test = y[test_window_start:]
 
     # Sequence generation
-    sequences = create_sequences(X, y_hat)
+    sequences = create_sequences(X, y_hat, tokenizer)
+    sequences_train = sequences[:test_window_start]
+
+    sequences_test = []
+    for x in sequences[test_window_start:]:
+        sequences_test.append(x.split("]")[0] + "]")
 
     # Tokenization
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
     tokenizer.pad_token = tokenizer.eos_token
-    tokenized = tokenizer(sequences, padding=True, truncation=True, return_tensors="pt")
+    train_input_tokens = tokenizer(sequences_train, padding_side = 'left', padding=True, return_tensors="pt")
+    test_input_tokens = tokenizer(sequences_test, padding_side = 'left', padding=True, return_tensors="pt")
+    tokenized = tokenizer(sequences, padding=True, truncation=True, return_tensors="pt") 
+    
+    return train_Dataset(train_input_tokens.input_ids, train_input_tokens.attention_mask), test_Dataset(test_input_tokens.input_ids, test_input_tokens.attention_mask, y_test), dict_variables
 
-    return tokenized, tokenizer, y, dict_variables[target][2], sequences
-
-
-def get_datasets(tokenized, y, test_window_start):
-
-    input_ids = tokenized.input_ids
-    attention_mask = tokenized.attention_mask
-    labels = input_ids.clone()
-    labels[:, :1] = -100  # mask inputs
-
-    train_dataset = TS_Dataset(input_ids[:test_window_start], attention_mask[:test_window_start], labels[:test_window_start])
-    val_dataset = TS_Dataset(input_ids[test_window_start:], attention_mask[test_window_start:], labels[test_window_start:])
-    y_val = y[test_window_start:]
-
-    return train_dataset, val_dataset, y_val
-
-def train_model(train_dataset, val_dataset, path_model, epochs):
+def train_model(train_dataset, name_model, epochs, path_model = None):
     
     # Model
-    model = GPT2LMHeadModel.from_pretrained('gpt2').to(DEVICE)
+    model = AutoModelForCausalLM.from_pretrained(name_model, torch_dtype="auto",device_map="auto")
 
     # Training
     training_args = TrainingArguments(
@@ -127,7 +136,7 @@ def train_model(train_dataset, val_dataset, path_model, epochs):
         learning_rate=2e-5,
         warmup_steps=50,
         weight_decay=0.001,
-        logging_steps=20,
+        logging_steps=200,
         prediction_loss_only=True,
         report_to="none",
         save_strategy='no',
@@ -138,35 +147,91 @@ def train_model(train_dataset, val_dataset, path_model, epochs):
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=val_dataset,
+        #eval_dataset=val_dataset,
     )
 
     trainer.train()
 
-    model.save_pretrained(path_model)
+    if path_model is not None:
+        model.save_pretrained(path_model)
 
     return model
 
-def predict(model, tokenizer, sequences, partitioner):
-    pred_length = 1
-    input_seq = sequences[:sequences.index(']') + 1]
+def predict(train_dataset, model, tokenizer, dict_variables):
 
-    inputs = tokenizer.encode(input_seq, return_tensors='pt').to(DEVICE)
+  dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+
+  all_preds = []
+  all_actuals = []
+
+  for batch_data in dataloader:
+      inputs = batch_data['input_ids']
+      attention_mask = batch_data['attention_mask']
+      labels = batch_data['labels']
+
+      inputs = inputs.to(DEVICE)
+      attention_mask = attention_mask.to(DEVICE)
+
+      outputs = model.generate(inputs, attention_mask=attention_mask, pad_token_id=tokenizer.eos_token_id)
+
+      decoded = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+      preds = []
+      for x in decoded:
+        var, fset = dict_variables[target][2].get_fuzzy_set_by_name(x.split("]")[-1].strip())
+        preds.append(dict_variables[target][2].centers[var][fset].item())
+      
+      l = [float(x) for x in labels]
+
+      all_preds.extend(preds)
+      all_actuals.extend(l)
+
     
-    outputs = model.generate(
-        inputs,
-        max_length = inputs.shape[1] + pred_length * 4,
-        temperature=0.5,
-        num_return_sequences=1,
-        pad_token_id=tokenizer.eos_token_id
-    )
+  return all_preds, all_actuals
 
-    decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    decoded_split = decoded.split(']')[-1].split()
+def rolling_window(n_window, df):
+    
+    # Tamanho de cada janela
+    window_size = len(df) // n_window
+    
+    # Separar janelas
+    windows = [df.iloc[i*window_size : (i+1)*window_size] for i in range(n_window)]
+    
+    # Adicionar o restante à última janela, se necessário
+    remainder = len(df) % n_window
+    if remainder:
+        windows[-1] = pd.concat([windows[-1], df.iloc[-remainder:]])
 
-    #print(f"Decoded: {decoded_split[0]}")
+    return windows
 
-    var, fset = partitioner.get_fuzzy_set_by_name(decoded_split[0])
-    decoded_value = partitioner.centers[var][fset].item()
+def calc_metrics(database_path):
+    import statistics
+    
+    datasets = pd.DataFrame(sd.execute("SELECT name_dataset FROM results", database_path), columns=['name_dataset'])['name_dataset'].unique().tolist()
+    windows = pd.DataFrame(sd.execute("SELECT window FROM results", database_path), columns=['window'])['window'].unique().tolist()
+    
+    for d in datasets:
+        mae = []
+        rmse = []
+        for w in windows:
+            query = "SELECT * FROM results WHERE name_dataset=='"+d+"' and window=="+str(w)
+            results = pd.DataFrame(sd.execute(query, database_path), columns=['name_dataset', 'window', 'forecasts', 'real'])
 
-    return decoded_value
+            mae.append(np.mean(np.abs(np.array(results['forecasts'].values) - np.array(results['real'].values))))
+            rmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2)))
+
+        avg_mae = statistics.mean(mae)
+        avg_rmse = statistics.mean(rmse)
+
+        std_mae = statistics.stdev(mae)
+        std_rmse = statistics.stdev(rmse)
+
+        df_resultados = pd.DataFrame([{
+            "Dataset": d,
+            "AVG RMSE": avg_rmse,
+            "STD RMSE": std_rmse,
+            "AVG MAE": avg_mae,
+            "STD MAE": std_mae,
+        }])
+
+    return df_resultados
