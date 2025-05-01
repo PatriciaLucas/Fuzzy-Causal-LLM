@@ -194,7 +194,7 @@ def rolling_window(df):
 
     total_len = len(df)
     window_size = int(0.3 * total_len)
-    n_windows = 10
+    n_windows = 5
 
     # Calcular passo necessário para obter 10 janelas
     step = (total_len - window_size) // (n_windows - 1)
