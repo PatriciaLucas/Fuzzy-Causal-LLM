@@ -189,18 +189,18 @@ def predict(train_dataset, model, tokenizer, dict_variables, target):
     
   return all_preds, all_actuals
 
-def rolling_window(n_window, df):
-    
-    # Tamanho de cada janela
-    window_size = len(df) // n_window
-    
-    # Separar janelas
-    windows = [df.iloc[i*window_size : (i+1)*window_size] for i in range(n_window)]
-    
-    # Adicionar o restante à última janela, se necessário
-    remainder = len(df) % n_window
-    if remainder:
-        windows[-1] = pd.concat([windows[-1], df.iloc[-remainder:]])
+def rolling_window(df):
+    import pandas as pd
+
+    total_len = len(df)
+    window_size = int(0.3 * total_len)
+    n_windows = 10
+
+    # Calcular passo necessário para obter 10 janelas
+    step = (total_len - window_size) // (n_windows - 1)
+
+    # Gerar janelas
+    windows = [df.iloc[i:i + window_size] for i in range(0, step * (n_windows - 1) + 1, step)]
 
     return windows
 
