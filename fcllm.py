@@ -157,7 +157,7 @@ def train_model(train_dataset, name_model, epochs, path_model = None):
 
     return model
 
-def predict(train_dataset, model, tokenizer, dict_variables):
+def predict(train_dataset, model, tokenizer, dict_variables, target):
 
   dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
