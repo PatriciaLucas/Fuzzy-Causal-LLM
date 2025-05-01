@@ -214,23 +214,26 @@ def calc_metrics(database_path):
     for d in datasets:
         mae = []
         rmse = []
+        nrmse = []
         for w in windows:
             query = "SELECT * FROM results WHERE name_dataset=='"+d+"' and window=="+str(w)
             results = pd.DataFrame(sd.execute(query, database_path), columns=['name_dataset', 'window', 'forecasts', 'real'])
 
             mae.append(np.mean(np.abs(np.array(results['forecasts'].values) - np.array(results['real'].values))))
             rmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2)))
-
+            maxmin = max(results['real'].values) - min(results['real'].values)
+            nrmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2))/maxmin)
+            
         avg_mae = statistics.mean(mae)
-        avg_rmse = statistics.mean(rmse)
+        avg_nrmse = statistics.mean(nrmse)
 
         std_mae = statistics.stdev(mae)
-        std_rmse = statistics.stdev(rmse)
+        std_nrmse = statistics.stdev(nrmse)
 
         df_resultados = pd.DataFrame([{
             "Dataset": d,
-            "AVG RMSE": avg_rmse,
-            "STD RMSE": std_rmse,
+            "AVG NRMSE": avg_nrmse,
+            "STD NRMSE": std_nrmse,
             "AVG MAE": avg_mae,
             "STD MAE": std_mae,
         }])
