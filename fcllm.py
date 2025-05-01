@@ -210,6 +210,7 @@ def calc_metrics(database_path):
     datasets = pd.DataFrame(sd.execute("SELECT name_dataset FROM results", database_path), columns=['name_dataset'])['name_dataset'].unique().tolist()
     windows = pd.DataFrame(sd.execute("SELECT window FROM results", database_path), columns=['window'])['window'].unique().tolist()
     
+    results_datasets = []
     for d in datasets:
         mae = []
         rmse = []
@@ -234,4 +235,6 @@ def calc_metrics(database_path):
             "STD MAE": std_mae,
         }])
 
-    return df_resultados
+        results_datasets.append(df_resultados)
+
+    return results_datasets
