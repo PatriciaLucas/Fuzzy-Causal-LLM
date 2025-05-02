@@ -92,10 +92,10 @@ def create_sequences(X, y, tokenizer):
 
 def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokenizer, partitions):
     #Exclui séries constantes
-        for variable in dataset.columns:
-            if dataset[variable].max() == dataset[variable].min():
-                dataset = dataset.drop(variable, axis=1)
-                print(f"Variables {variable} were deleted because they are constant.")
+    for variable in df.columns:
+        if df[variable].max() == df[variable].min():
+            df = df.drop(variable, axis=1)
+            print(f"Variables {variable} were deleted because they are constant.")
               
     variables = df.columns.tolist()
     dict_variables = dict.fromkeys(variables)
@@ -195,12 +195,11 @@ def predict(train_dataset, model, tokenizer, dict_variables, target):
     
   return all_preds, all_actuals
 
-def rolling_window(df):
+def rolling_window(df, n_windows):
     import pandas as pd
 
     total_len = len(df)
     window_size = int(0.3 * total_len)
-    n_windows = 5
 
     # Calcular passo necessário para obter 10 janelas
     step = (total_len - window_size) // (n_windows - 1)
