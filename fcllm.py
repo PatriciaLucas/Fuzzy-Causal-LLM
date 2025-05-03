@@ -91,12 +91,7 @@ def create_sequences(X, y, tokenizer):
 
 
 def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokenizer, partitions):
-    #Exclui séries constantes
-    for variable in df.columns:
-        if df[variable].max() == df[variable].min():
-            df = df.drop(variable, axis=1)
-            print(f"Variables {variable} were deleted because they are constant.")
-              
+                
     variables = df.columns.tolist()
     dict_variables = dict.fromkeys(variables)
     
