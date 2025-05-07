@@ -123,6 +123,30 @@ def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags, test_window_start
     
     return train_Dataset(train_input_tokens.input_ids, train_input_tokens.attention_mask), test_Dataset(test_input_tokens.input_ids, test_input_tokens.attention_mask, y_test), dict_variables
 
+def text_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokenizer, partitions):
+
+    # Causal graph generation
+    graph = feature_selection.complete_graph(df.head(2000), target=target, max_lags=max_lags)[target]
+    X, y_hat = util.organize_dataset(df, graph, max_lags, target)
+    y = df[target].squeeze().tolist()[max_lags:]
+    y_test = y[test_window_start:]
+
+    # Sequence generation
+    sequences = create_sequences(X, y_hat, tokenizer)
+    sequences_train = sequences[:test_window_start]
+
+    sequences_test = []
+    for x in sequences[test_window_start:]:
+        sequences_test.append(x.split("]")[0] + "]")
+
+    # Tokenization
+    tokenizer.pad_token = tokenizer.eos_token
+    train_input_tokens = tokenizer(sequences_train, padding_side = 'left', padding=True, return_tensors="pt")
+    test_input_tokens = tokenizer(sequences_test, padding_side = 'left', padding=True, return_tensors="pt")
+    tokenized = tokenizer(sequences, padding=True, truncation=True, return_tensors="pt") 
+    
+    return train_Dataset(train_input_tokens.input_ids, train_input_tokens.attention_mask), test_Dataset(test_input_tokens.input_ids, test_input_tokens.attention_mask, y_test)
+
 def train_model(train_dataset, name_model, epochs, path_model = None):
     
     # Model
@@ -216,26 +240,23 @@ def calc_metrics(database_path):
         rmse = []
         nrmse = []
         for w in windows:
-            query = "SELECT * FROM results WHERE name_dataset=='"+d+"' and window=="+str(w)
-            results = pd.DataFrame(sd.execute(query, database_path), columns=['name_dataset', 'window', 'forecasts', 'real'])
-
-            mae.append(np.mean(np.abs(np.array(results['forecasts'].values) - np.array(results['real'].values))))
-            rmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2)))
-            maxmin = max(results['real'].values) - min(results['real'].values)
-            nrmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2))/maxmin)
+          try:
+              query = "SELECT * FROM results WHERE name_dataset=='"+d+"' and window=="+str(w)
+              results = pd.DataFrame(sd.execute(query, database_path), columns=['name_dataset', 'window', 'forecasts', 'real'])
+  
+              rmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2)))
+              maxmin = max(results['real'].values) - min(results['real'].values)
+              nrmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2))/maxmin)
+          except:
+              pass
             
-        avg_mae = statistics.mean(mae)
         avg_nrmse = statistics.mean(nrmse)
-
-        std_mae = statistics.stdev(mae)
         std_nrmse = statistics.stdev(nrmse)
 
         df_resultados = pd.DataFrame([{
             "Dataset": d,
             "AVG NRMSE": avg_nrmse,
             "STD NRMSE": std_nrmse,
-            "AVG MAE": avg_mae,
-            "STD MAE": std_mae,
         }])
 
         results_datasets.append(df_resultados)
