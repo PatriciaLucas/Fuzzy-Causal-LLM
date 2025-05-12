@@ -182,7 +182,7 @@ def train_model(train_dataset, name_model, epochs, path_model = None):
 
     return model
 
-def predict(train_dataset, model, tokenizer, dict_variables, target):
+def predict(train_dataset, model, tokenizer, target, dict_variables = None):
 
   dataloader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
@@ -203,8 +203,13 @@ def predict(train_dataset, model, tokenizer, dict_variables, target):
 
       preds = []
       for x in decoded:
-        var, fset = dict_variables[target][2].get_fuzzy_set_by_name(x.split("]")[-1].strip())
-        preds.append(dict_variables[target][2].centers[var][fset].item())
+        if dict_variables == None:
+          preds.append(x.split("]")[-1].strip())
+          print(x.split("]")[-1].strip())
+        else:
+          var, fset = dict_variables[target][2].get_fuzzy_set_by_name(x.split("]")[-1].strip())
+          preds.append(dict_variables[target][2].centers[var][fset].item())
+          
       
       l = [float(x) for x in labels]
 
