@@ -123,9 +123,9 @@ def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags, test_window_start
     
     return train_Dataset(train_input_tokens.input_ids, train_input_tokens.attention_mask), test_Dataset(test_input_tokens.input_ids, test_input_tokens.attention_mask, y_test), dict_variables
 
-def text_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokenizer, partitions):
+def text_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokenizer):
 
-    # Causal graph generation
+    # Complete graph generation
     graph = feature_selection.complete_graph(df.head(2000), target=target, max_lags=max_lags)[target]
     X, y_hat = util.organize_dataset(df, graph, max_lags, target)
     y = df[target].squeeze().tolist()[max_lags:]
