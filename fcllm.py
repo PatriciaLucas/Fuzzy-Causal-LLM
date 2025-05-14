@@ -205,7 +205,6 @@ def predict(train_dataset, model, tokenizer, target, dict_variables = None):
       for x in decoded:
         if dict_variables == None:
           preds.append(x.split("]")[-1].strip())
-          print(x.split("]")[-1].strip())
         else:
           var, fset = dict_variables[target][2].get_fuzzy_set_by_name(x.split("]")[-1].strip())
           preds.append(dict_variables[target][2].centers[var][fset].item())
