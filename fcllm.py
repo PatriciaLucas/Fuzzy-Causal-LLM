@@ -78,12 +78,23 @@ def fuzzification(df, name_dataset, letter, partitions, partitioner = None):
     return pd.DataFrame(ts_fuzzy), ts.y, partitioner
 
 
-def create_sequences(X, y, tokenizer):
+def create_sequences_fuzzy(X, y, tokenizer):
   sequences = []
   for i in range(len(X)):
       seq_in = X.iloc[i].values
       seq_out = y.iloc[i]
       sequences.append((str(seq_in).replace("'", ""),str(seq_out)))
+  
+  text_sequences = [f"{inp} {out}" + tokenizer.eos_token for inp, out in sequences]
+
+  return text_sequences
+
+def create_sequences_text(X, y, tokenizer):
+  sequences = []
+  for i in range(len(X)):
+      seq_in = X.iloc[i].values
+      seq_out = y.iloc[i]
+      sequences.append((str(seq_in),str(seq_out)))
   
   text_sequences = [f"{inp} {out}" + tokenizer.eos_token for inp, out in sequences]
 
@@ -108,7 +119,7 @@ def fuzzy_causal_tokenizer(df, name_dataset, target, max_lags, test_window_start
     y_test = y[test_window_start:]
 
     # Sequence generation
-    sequences = create_sequences(X, y_hat, tokenizer)
+    sequences = create_sequences_fuzzy(X, y_hat, tokenizer)
     sequences_train = sequences[:test_window_start]
 
     sequences_test = []
@@ -132,7 +143,34 @@ def text_tokenizer(df, name_dataset, target, max_lags, test_window_start, tokeni
     y_test = y[test_window_start:]
 
     # Sequence generation
-    sequences = create_sequences(X, y_hat, tokenizer)
+    sequences = create_sequences_text(X, y_hat, tokenizer)
+    sequences_train = sequences[:test_window_start]
+
+    sequences_test = []
+    for x in sequences[test_window_start:]:
+        sequences_test.append(x.split("]")[0] + "]")
+
+    # Tokenization
+    tokenizer.pad_token = tokenizer.eos_token
+    train_input_tokens = tokenizer(sequences_train, padding_side = 'left', padding=True, return_tensors="pt")
+    test_input_tokens = tokenizer(sequences_test, padding_side = 'left', padding=True, return_tensors="pt")
+    tokenized = tokenizer(sequences, padding=True, truncation=True, return_tensors="pt") 
+    
+    return train_Dataset(train_input_tokens.input_ids, train_input_tokens.attention_mask), test_Dataset(test_input_tokens.input_ids, test_input_tokens.attention_mask, y_test)
+
+def causal_text(df, name_dataset, target, max_lags, test_window_start, tokenizer):
+                
+    variables = df.columns.tolist()
+    dict_variables = dict.fromkeys(variables)
+
+    # Causal graph generation
+    graph = feature_selection.causal_graph(df.head(2000), target=target, max_lags=max_lags)[target]
+    X, y_hat = util.organize_dataset(df, graph, max_lags, target)
+    y = df[target].squeeze().tolist()[max_lags:]
+    y_test = y[test_window_start:]
+
+    # Sequence generation
+    sequences = create_sequences_text(X, y_hat, tokenizer)
     sequences_train = sequences[:test_window_start]
 
     sequences_test = []
