@@ -101,7 +101,7 @@ def causal_text(df, name_dataset, target, max_lags, tokenizer):
     
     return custom_Dataset(input_tokens.input_ids, input_tokens.attention_mask, labels_scaled), scaler
 
-def text(df, name_dataset, target, max_lags, test_window_start, tokenizer):
+def text(df, name_dataset, target, max_lags, tokenizer):
 
     # Complete graph generation
     graph = feature_selection.complete_graph(df.head(2000), target=target, max_lags=max_lags)[target]
@@ -121,7 +121,7 @@ def text(df, name_dataset, target, max_lags, test_window_start, tokenizer):
     return custom_Dataset(input_tokens.input_ids, input_tokens.attention_mask, labels_scaled), scaler
 
 
-def fuzzy_causal(df, name_dataset, target, max_lags, test_window_start, tokenizer):
+def fuzzy_causal(df, name_dataset, target, max_lags, tokenizer):
                 
     variables = df.columns.tolist()
     dict_variables = dict.fromkeys(variables)
