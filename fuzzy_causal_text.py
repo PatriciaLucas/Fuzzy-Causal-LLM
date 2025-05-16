@@ -79,38 +79,21 @@ def create_sequences_input(X, y, tokenizer):
   return text_sequences
 
 
-def causal_text(df, name_dataset, target, max_lags, test_window_start, tokenizer):
+def causal_text(df, name_dataset, target, max_lags, tokenizer):
                 
     variables = df.columns.tolist()
     dict_variables = dict.fromkeys(variables)
-    
-    # Fuzzification of time series
-    # data_fuzzy = pd.DataFrame(columns=variables)
-    # for v in variables:
-    #     dict_variables[v] = fuzzification(pd.DataFrame(df[v]), name_dataset, v, partitions, None)
-    #     data_fuzzy[v] = dict_variables[v][0]
 
     # Causal graph generation
     graph = feature_selection.causal_graph(df.head(2000), target=target, max_lags=max_lags)[target]
     X, y_hat = util.organize_dataset(df, graph, max_lags, target)
     y = df[target].squeeze().tolist()[max_lags:]
     y = np.asarray(y)
-    # y_test = y[test_window_start:]
 
     scaler = StandardScaler()
     labels_scaled = scaler.fit_transform(y.reshape(-1, 1))
 
-    # Sequence generation
-    # sequences = create_sequences_text(X, y_hat, tokenizer)
-    # sequences_train = sequences[:test_window_start]
-
-    # sequences_test = []
-    # for x in sequences[test_window_start:]:
-    #     sequences_test.append(x.split("]")[0] + "]")
-
     inputs = create_sequences_input(X, y, tokenizer)
-
-    print(inputs[0])
 
     # Tokenization
     tokenizer.pad_token = tokenizer.eos_token
@@ -128,19 +111,8 @@ def text(df, name_dataset, target, max_lags, test_window_start, tokenizer):
 
     scaler = StandardScaler()
     labels_scaled = scaler.fit_transform(y.reshape(-1, 1))
-
-    # # Sequence generation
-    # sequences = create_sequences_text(X, y_hat, tokenizer)
-    # sequences_train = sequences[:test_window_start]
-    
-    # sequences_test = []
-    # for x in sequences[test_window_start:]:
-    #     sequences_test.append(x.split("]")[0] + "]")
-    # print(sequences_test[0])
     
     inputs = create_sequences_input(X, y, tokenizer)
-
-    print(inputs[0])
 
     # Tokenization
     tokenizer.pad_token = tokenizer.eos_token
@@ -168,14 +140,6 @@ def fuzzy_causal(df, name_dataset, target, max_lags, test_window_start, tokenize
 
     scaler = StandardScaler()
     labels_scaled = scaler.fit_transform(y.reshape(-1, 1))
-
-    # Sequence generation
-    # sequences = create_sequences_fuzzy(X, y_hat, tokenizer)
-    # sequences_train = sequences[:test_window_start]
-
-    # sequences_test = []
-    # for x in sequences[test_window_start:]:
-    #     sequences_test.append(x.split("]")[0] + "]")
 
     inputs = create_sequences_input(X, y, tokenizer)
 
@@ -238,7 +202,7 @@ class GPT2Forecaster(nn.Module):
         
         return {"loss" : loss, "logits" : output.squeeze(0)}
 
-def train_model(train_dataset, name_model, epochs, path_model = None):
+def train_model(train_dataset, name_model, epochs, scaler, path_model = None):
     
     # Model
     model = GPT2Forecaster(scaler=scaler)
@@ -275,7 +239,7 @@ def train_model(train_dataset, name_model, epochs, path_model = None):
 
 
 
-def predict(test_dataset, model, tokenizer, target, dict_variables = None):
+def predict(test_dataset, model, tokenizer, target, scaler, dict_variables = None):
 
   dataloader = DataLoader(test_dataset, batch_size=32, shuffle=True)
 
