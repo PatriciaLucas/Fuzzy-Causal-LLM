@@ -297,6 +297,8 @@ def predict(test_dataset, model, tokenizer, target, dict_variables = None):
     all_preds.extend(unscaled.squeeze(1))
     all_actuals.extend(trues.squeeze(1))
 
+  return all_preds, all_actuals
+
 def rolling_window(df, n_windows):
     import pandas as pd
 
@@ -347,4 +349,4 @@ def calc_metrics(database_path):
     return results_datasets
 
     
-  return all_preds, all_actuals
+  
