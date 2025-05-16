@@ -297,5 +297,54 @@ def predict(test_dataset, model, tokenizer, target, dict_variables = None):
     all_preds.extend(unscaled.squeeze(1))
     all_actuals.extend(trues.squeeze(1))
 
+def rolling_window(df, n_windows):
+    import pandas as pd
+
+    total_len = len(df)
+    window_size = int(0.3 * total_len)
+
+    # Calcular passo necessário para obter 10 janelas
+    step = (total_len - window_size) // (n_windows - 1)
+
+    # Gerar janelas
+    windows = [df.iloc[i:i + window_size] for i in range(0, step * (n_windows - 1) + 1, step)]
+
+    return windows
+
+def calc_metrics(database_path):
+    import statistics
+    
+    datasets = pd.DataFrame(sd.execute("SELECT name_dataset FROM results", database_path), columns=['name_dataset'])['name_dataset'].unique().tolist()
+    windows = pd.DataFrame(sd.execute("SELECT window FROM results", database_path), columns=['window'])['window'].unique().tolist()
+    
+    results_datasets = []
+    for d in datasets:
+        mae = []
+        rmse = []
+        nrmse = []
+        for w in windows:
+          try:
+              query = "SELECT * FROM results WHERE name_dataset=='"+d+"' and window=="+str(w)
+              results = pd.DataFrame(sd.execute(query, database_path), columns=['name_dataset', 'window', 'forecasts', 'real'])
+  
+              rmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2)))
+              maxmin = max(results['real'].values) - min(results['real'].values)
+              nrmse.append(np.sqrt(np.mean((np.array(results['forecasts'].values) - np.array(results['real'].values)) ** 2))/maxmin)
+          except:
+              pass
+            
+        avg_nrmse = statistics.mean(nrmse)
+        std_nrmse = statistics.stdev(nrmse)
+
+        df_resultados = pd.DataFrame([{
+            "Dataset": d,
+            "AVG NRMSE": avg_nrmse,
+            "STD NRMSE": std_nrmse,
+        }])
+
+        results_datasets.append(df_resultados)
+
+    return results_datasets
+
     
   return all_preds, all_actuals
