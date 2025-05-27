@@ -1,1 +1,1 @@
-# Fuzzy-Causal-LLM
+# Causal Graph Fuzzy LLM
