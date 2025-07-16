@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-#!pip install --quiet git+https://github.com/PatriciaLucas/AutoML.git
-#!pip install --quiet git+https://PatriciaLucas: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@github.com/petroniocandido/clshq_tk.git
-#!git clone https://github.com/PatriciaLucas/Fuzzy-Causal-LLM.git
-
 import clshq_tk
 from AUTODCETS import util, feature_selection, datasets, save_database as sd
 import numpy as np
@@ -22,7 +17,7 @@ import signal
 import gc
 
 sys.path.append('Fuzzy-Causal-LLM')
-import fuzzy_causal_text as fcllm
+import fuzzy_causal_text_lora as fcllm
 
 """
 **Datasets**:
